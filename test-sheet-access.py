@@ -37,6 +37,38 @@ TARGET_COLUMNS = [
     "Website",
 ]
 
+OTHER_DATE_COLUMNS = [
+    "Papers due",
+    "Posters due",
+    "Reg opens",
+    "Reg closes",
+]
+
+RED_TEXT_FORMAT = {
+    "textFormat": {
+        "foregroundColor": {"red": 1.0, "green": 0.0, "blue": 0.0},
+    }
+}
+
+BLACK_TEXT_FORMAT = {
+    "textFormat": {
+        "foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0},
+    }
+}
+
+
+def parse_iso_date(val: Optional[str]) -> Optional[date]:
+    """Parse a YYYY-MM-DD prefix from an ISO 8601 date string, returning None if invalid."""
+    if not val:
+        return None
+    s = val.strip()
+    if len(s) >= 10:
+        try:
+            return date.fromisoformat(s[:10])
+        except ValueError:
+            return None
+    return None
+
 
 class ConferenceDetails(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -111,10 +143,11 @@ def process(
     model: str = "gemini-3.8-flash",
 ):
     """Invoke an LLM to find Website, Begin, and End for `conference` and write them to the spreadsheet."""
+    today = date.today()
     prompt = (
         prompt_template
         .replace("{conference}", conference)
-        .replace("{today}", date.today().isoformat())
+        .replace("{today}", today.isoformat())
     )
     completion = client.beta.chat.completions.parse(
         model=model,
@@ -131,6 +164,17 @@ def process(
         for col in TARGET_COLUMNS
     }
 
+    begin_date = parse_iso_date(values_to_write["Begin"])
+    end_date = parse_iso_date(values_to_write["End"])
+    conf_ref_date = end_date or begin_date
+
+    is_past_conference = conf_ref_date is not None and conf_ref_date < today
+    is_future_conference = conf_ref_date is not None and conf_ref_date >= today
+
+    if is_past_conference:
+        for col_name in OTHER_DATE_COLUMNS:
+            values_to_write[col_name] = ""
+
     print(f"Row {row_num} ({conference}): {values_to_write}")
 
     updates = [
@@ -141,6 +185,16 @@ def process(
         for col_name, val in values_to_write.items()
     ]
     worksheet.batch_update(updates, value_input_option="USER_ENTERED")
+
+    formats = []
+    for col_name in OTHER_DATE_COLUMNS:
+        cell_a1 = rowcol_to_a1(row_num, col_map[col_name])
+        cell_date = parse_iso_date(values_to_write[col_name])
+        if is_future_conference and cell_date is not None and cell_date >= today:
+            formats.append({"range": cell_a1, "format": RED_TEXT_FORMAT})
+        else:
+            formats.append({"range": cell_a1, "format": BLACK_TEXT_FORMAT})
+    worksheet.batch_format(formats)
 
 
 def main():
@@ -174,10 +228,9 @@ def main():
         ),
     )
 
-    for row_num, row in enumerate(rows[1:], start=2):
+    for row_num, row in enumerate(rows[1:11], start=2):
         conference = row[conf_col_idx] if conf_col_idx < len(row) else ""
         process(conference, prompt_template, worksheet, row_num, col_map, client)
-        break  # Temporary: only do one iteration for now
 
 
 if __name__ == "__main__":
