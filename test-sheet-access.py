@@ -9,6 +9,7 @@
 # ]
 # ///
 
+from datetime import date
 import os
 import pathlib
 from typing import Optional
@@ -110,13 +111,18 @@ def process(
     model: str = "gemini-3.8-flash",
 ):
     """Invoke an LLM to find Website, Begin, and End for `conference` and write them to the spreadsheet."""
-    prompt = prompt_template.replace("{conference}", conference)
+    prompt = (
+        prompt_template
+        .replace("{conference}", conference)
+        .replace("{today}", date.today().isoformat())
+    )
     completion = client.beta.chat.completions.parse(
         model=model,
         messages=[
             {"role": "user", "content": prompt},
         ],
         response_format=ConferenceDetails,
+        web_search_options={"search_context_size": "medium"},
     )
     result = completion.choices[0].message.parsed
     dumped = result.model_dump(by_alias=True) if result else {}

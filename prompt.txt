@@ -1,3 +1,5 @@
+Today's date is {today}.
+
 You are to find and return information about an academic conference.  The name of the conference is "{conference}".
 
 This conference likely takes place on a regular schedule, for example, annually or bi-annually.  You are to report on, and only on, the next occurrence of the conference that takes place in the future.  Do not report on any past occurrence.
