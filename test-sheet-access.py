@@ -16,7 +16,7 @@ from typing import Optional
 import gspread
 from gspread.utils import rowcol_to_a1
 from openai import OpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 SERVICE_ACCOUNT_FILE = "service_account.json"
 PROMPT_FILE = "prompt.txt"
@@ -25,19 +25,56 @@ SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1b846EZadawdaeEN7xTdfS
 # Restrict scope to Google Sheets only (no Google Drive browsing/listing needed when opening by URL/ID)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
+TARGET_COLUMNS = [
+    "Location",
+    "Begin",
+    "End",
+    "Papers due",
+    "Posters due",
+    "Reg opens",
+    "Reg closes",
+    "Website",
+]
+
 
 class ConferenceDetails(BaseModel):
-    Website: Optional[str] = Field(
+    model_config = ConfigDict(populate_by_name=True)
+
+    Location: Optional[str] = Field(
         None,
-        description="The URL of the next future meeting of the conference.",
+        description='The city the conference takes place in ("city, state" in US or "city, country" outside US).',
     )
     Begin: Optional[str] = Field(
         None,
-        description="The conference begin date (YYYY-MM-DD if available).",
+        description="The date the conference starts on (ISO 8601 format).",
     )
     End: Optional[str] = Field(
         None,
-        description="The conference end date (YYYY-MM-DD if available).",
+        description="The date the conference ends on (ISO 8601 format).",
+    )
+    Papers_due: Optional[str] = Field(
+        None,
+        alias="Papers due",
+        description="The date full paper submissions are due (ISO 8601 format).",
+    )
+    Posters_due: Optional[str] = Field(
+        None,
+        alias="Posters due",
+        description="The date poster and lightning talk submissions are due (ISO 8601 format).",
+    )
+    Reg_opens: Optional[str] = Field(
+        None,
+        alias="Reg opens",
+        description="The date registration opens (ISO 8601 format).",
+    )
+    Reg_closes: Optional[str] = Field(
+        None,
+        alias="Reg closes",
+        description="The date registration closes (ISO 8601 format).",
+    )
+    Website: Optional[str] = Field(
+        None,
+        description="The URL of the conference's homepage.",
     )
 
 
@@ -82,11 +119,10 @@ def process(
         response_format=ConferenceDetails,
     )
     result = completion.choices[0].message.parsed
-
+    dumped = result.model_dump(by_alias=True) if result else {}
     values_to_write = {
-        "Website": (result.Website if result and result.Website else ""),
-        "Begin": (result.Begin if result and result.Begin else ""),
-        "End": (result.End if result and result.End else ""),
+        col: (dumped.get(col) or "")
+        for col in TARGET_COLUMNS
     }
 
     print(f"Row {row_num} ({conference}): {values_to_write}")
@@ -112,7 +148,7 @@ def main():
         return
 
     headers = rows[0]
-    required_cols = ["Conference", "Website", "Begin", "End"]
+    required_cols = ["Conference", *TARGET_COLUMNS]
     for col in required_cols:
         if col not in headers:
             raise ValueError(f"{col!r} column not found in header row: {headers}")
@@ -120,7 +156,7 @@ def main():
     conf_col_idx = headers.index("Conference")  # 0-based for reading from `row` list
     col_map = {
         col: headers.index(col) + 1  # 1-based column indices for gspread
-        for col in ["Website", "Begin", "End"]
+        for col in TARGET_COLUMNS
     }
 
     prompt_template = pathlib.Path(PROMPT_FILE).read_text(encoding="utf-8")
