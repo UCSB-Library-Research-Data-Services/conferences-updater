@@ -228,9 +228,14 @@ def main():
         ),
     )
 
-    for row_num, row in enumerate(rows[1:11], start=2):
+    for row_num, row in enumerate(rows[1:], start=2):
         conference = row[conf_col_idx] if conf_col_idx < len(row) else ""
         process(conference, prompt_template, worksheet, row_num, col_map, client)
+
+    if len(rows) > 1:
+        sort_range = f"A2:{rowcol_to_a1(len(rows), len(headers))}"
+        worksheet.sort((col_map["Begin"], "asc"), range=sort_range)
+        print(f"Sorted rows 2..{len(rows)} by 'Begin' column ascending.")
 
 
 if __name__ == "__main__":
