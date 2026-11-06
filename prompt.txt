@@ -6,7 +6,7 @@ This conference likely takes place on a regular schedule, for example, annually 
 
 Your first task is to find the website for the conference.  Again, we are only interested in the next future occurrence of the conference.  Capture the following information:
 
-- Location: The city the conference takes place in.  If the US, record as "city, state" using a 2-letter state abbreviation.  If outside the US, record as "city, country".
+- Location: The city the conference takes place in.  If in the US, record as "city, state" using a 2-letter state abbreviation.  If outside the US, record as "city, country".  Record the location as "Virtual" only if the conference is entirely virtual.
 - Begin: The date the conference starts on.
 - End: The date the conference ends on.
 - Papers due: The date full paper submissions are due.
