@@ -2,9 +2,9 @@ Today's date is {today}.
 
 You are to find and return information about an academic conference.  The name of the conference is "{conference}".
 
-This conference likely takes place on a regular schedule, for example, annually or bi-annually.  You are to report on, and only on, the next occurrence of the conference that takes place in the future.  Do not report on any past occurrence.
+This conference likely takes place on a regular schedule, for example, annually or bi-annually.  Your primary goal is to report on, and only on, the next occurrence of the conference that takes place in the future.  Only if you fail to locate any future occurrence, report on the most recent past occurrence.
 
-Your first task is to find the website for the conference.  Again, we are only interested in the next future occurrence of the conference.  Capture the following information:
+Your first task is to find the website for the conference.  Note again the priority order of the next future occurrence, or failing that, the most recent past occurrence.  Capture the following information:
 
 - Location: The city the conference takes place in.  If in the US, record as "city, state" using a 2-letter state abbreviation.  If outside the US, record as "city, country".  Record the location as "Virtual" only if the conference is entirely virtual.
 - Begin: The date the conference starts on.
@@ -15,7 +15,7 @@ Your first task is to find the website for the conference.  Again, we are only i
 - Reg closes: The date registration closes.
 - Website: The URL of the conference's homepage.
 
-If you cannot find any piece of information, record its value as "?".  If you cannot find the conference website at all, record all values as "?".
+If you cannot find any piece of information, record its value as blank.  If you cannot find the conference website at all, record all values as blank.
 
 Record all dates in ISO 8601 format.
 
