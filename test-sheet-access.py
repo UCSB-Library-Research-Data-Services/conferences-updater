@@ -9,9 +9,11 @@
 # ]
 # ///
 
-from datetime import date
+import csv
+from datetime import date, datetime, timezone
 import os
 import pathlib
+import sys
 from typing import Optional
 
 import gspread
@@ -21,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 SERVICE_ACCOUNT_FILE = "service_account.json"
 PROMPT_FILE = "prompt.txt"
+ACTION_LOG_FILE = "action_log.csv"
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1b846EZadawdaeEN7xTdfSggazWiRDCuHfH7V6X3ehBE/edit?gid=0#gid=0"
 
 # Restrict scope to Google Sheets only (no Google Drive browsing/listing needed when opening by URL/ID)
@@ -133,16 +136,33 @@ def load_api_key() -> str:
     )
 
 
+def log_cell_changes(
+    log_path: pathlib.Path,
+    changes: list[tuple[str, str, str, str]],
+) -> None:
+    """Append changed cells (timestamp, cell, old_value, new_value) to action_log.csv."""
+    if not changes:
+        return
+    write_header = not log_path.exists() or log_path.stat().st_size == 0
+    with log_path.open("a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        if write_header:
+            writer.writerow(["timestamp", "cell", "old_value", "new_value"])
+        writer.writerows(changes)
+
+
 def process(
     conference: str,
+    row: list[str],
     prompt_template: str,
     worksheet: gspread.Worksheet,
     row_num: int,
     col_map: dict[str, int],
     client: OpenAI,
+    log_path: pathlib.Path,
     model: str = "gemini-3.8-flash",
 ):
-    """Invoke an LLM to find Website, Begin, and End for `conference` and write them to the spreadsheet."""
+    """Invoke an LLM to find conference details for `conference` and write them to the spreadsheet."""
     today = date.today()
     prompt = (
         prompt_template
@@ -177,14 +197,27 @@ def process(
 
     print(f"Row {row_num} ({conference}): {values_to_write}")
 
-    updates = [
-        {
-            "range": rowcol_to_a1(row_num, col_map[col_name]),
-            "values": [[val]],
-        }
-        for col_name, val in values_to_write.items()
-    ]
+    updates = []
+    changes_to_log: list[tuple[str, str, str, str]] = []
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    for col_name, new_val in values_to_write.items():
+        col_1based = col_map[col_name]
+        col_0based = col_1based - 1
+        old_val = row[col_0based] if col_0based < len(row) else ""
+        cell_a1 = rowcol_to_a1(row_num, col_1based)
+
+        updates.append(
+            {
+                "range": cell_a1,
+                "values": [[new_val]],
+            }
+        )
+        if old_val != new_val:
+            changes_to_log.append((timestamp, cell_a1, old_val, new_val))
+
     worksheet.batch_update(updates, value_input_option="USER_ENTERED")
+    log_cell_changes(log_path, changes_to_log)
 
     formats = []
     for col_name in OTHER_DATE_COLUMNS:
@@ -195,6 +228,45 @@ def process(
         else:
             formats.append({"range": cell_a1, "format": BLACK_TEXT_FORMAT})
     worksheet.batch_format(formats)
+
+
+def parse_row_args(args: list[str], max_row: int) -> list[int]:
+    """Parse CLI arguments of row numbers (e.g. '3') or ranges (e.g. '4-7')."""
+    if not args:
+        return list(range(2, max_row + 1))
+
+    selected: list[int] = []
+    seen: set[int] = set()
+
+    for arg in args:
+        if "-" in arg:
+            parts = arg.split("-", 1)
+            if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+                raise ValueError(f"Invalid row range argument: {arg!r}")
+            start_row, end_row = int(parts[0]), int(parts[1])
+            if start_row < 2 or end_row < start_row:
+                raise ValueError(
+                    f"Invalid row range {arg!r} (rows must be >= 2 and start <= end)"
+                )
+            row_iter = range(start_row, end_row + 1)
+        else:
+            if not arg.isdigit():
+                raise ValueError(f"Invalid row argument: {arg!r}")
+            r = int(arg)
+            if r < 2:
+                raise ValueError(f"Row number must be >= 2 (got {r})")
+            row_iter = range(r, r + 1)
+
+        for r in row_iter:
+            if r > max_row:
+                raise ValueError(
+                    f"Row {r} is out of range (spreadsheet has {max_row} rows)"
+                )
+            if r not in seen:
+                seen.add(r)
+                selected.append(r)
+
+    return selected
 
 
 def main():
@@ -219,7 +291,10 @@ def main():
         for col in TARGET_COLUMNS
     }
 
+    target_rows = parse_row_args(sys.argv[1:], len(rows))
+
     prompt_template = pathlib.Path(PROMPT_FILE).read_text(encoding="utf-8")
+    log_path = pathlib.Path(ACTION_LOG_FILE)
 
     client = OpenAI(
         api_key=load_api_key(),
@@ -228,9 +303,19 @@ def main():
         ),
     )
 
-    for row_num, row in enumerate(rows[1:], start=2):
+    for row_num in target_rows:
+        row = rows[row_num - 1]
         conference = row[conf_col_idx] if conf_col_idx < len(row) else ""
-        process(conference, prompt_template, worksheet, row_num, col_map, client)
+        process(
+            conference,
+            row,
+            prompt_template,
+            worksheet,
+            row_num,
+            col_map,
+            client,
+            log_path,
+        )
 
     if len(rows) > 1:
         sort_range = f"A2:{rowcol_to_a1(len(rows), len(headers))}"
