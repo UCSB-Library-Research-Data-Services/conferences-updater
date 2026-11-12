@@ -25,6 +25,7 @@ SERVICE_ACCOUNT_FILE = "service_account.json"
 PROMPT_FILE = "prompt.txt"
 ACTION_LOG_FILE = "action_log.csv"
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1b846EZadawdaeEN7xTdfSggazWiRDCuHfH7V6X3ehBE/edit?gid=0#gid=0"
+LLM_MODEL = "gemini-4-argon"
 
 # Restrict scope to Google Sheets only (no Google Drive browsing/listing needed when opening by URL/ID)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -160,7 +161,6 @@ def process(
     col_map: dict[str, int],
     client: OpenAI,
     log_path: pathlib.Path,
-    model: str = "gemini-3.8-flash",
 ):
     """Invoke an LLM to find conference details for `conference` and write them to the spreadsheet."""
     today = date.today()
@@ -170,7 +170,7 @@ def process(
         .replace("{today}", today.isoformat())
     )
     completion = client.beta.chat.completions.parse(
-        model=model,
+        model=LLM_MODEL,
         messages=[
             {"role": "user", "content": prompt},
         ],
