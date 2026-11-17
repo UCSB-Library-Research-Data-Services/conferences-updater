@@ -26,6 +26,7 @@ PROMPT_FILE = "prompt.txt"
 ACTION_LOG_FILE = "action_log.csv"
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1b846EZadawdaeEN7xTdfSggazWiRDCuHfH7V6X3ehBE/edit?gid=0#gid=0"
 LLM_MODEL = "gemini-4-argon"
+HIGHLIGHT_CHANGED_CELLS = True
 
 # Restrict scope to Google Sheets only (no Google Drive browsing/listing needed when opening by URL/ID)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -57,6 +58,14 @@ RED_TEXT_FORMAT = {
 BLACK_TEXT_FORMAT = {
     "textFormat": {
         "foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0},
+    }
+}
+
+CHANGED_CELL_BG_FORMAT = {
+    "backgroundColor": {
+        "red": 253 / 255,
+        "green": 242 / 255,
+        "blue": 208 / 255,
     }
 }
 
@@ -231,7 +240,13 @@ def process(
             formats.append({"range": cell_a1, "format": RED_TEXT_FORMAT})
         else:
             formats.append({"range": cell_a1, "format": BLACK_TEXT_FORMAT})
-    worksheet.batch_format(formats)
+
+    if HIGHLIGHT_CHANGED_CELLS:
+        for _, cell_a1, _, _ in changes_to_log:
+            formats.append({"range": cell_a1, "format": CHANGED_CELL_BG_FORMAT})
+
+    if formats:
+        worksheet.batch_format(formats)
 
 
 def parse_row_args(args: list[str], max_row: int) -> list[int]:
