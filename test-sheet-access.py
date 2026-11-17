@@ -154,6 +154,8 @@ def log_cell_changes(
 
 def process(
     conference: str,
+    host_organization: str,
+    host_organization_website: str,
     row: list[str],
     prompt_template: str,
     worksheet: gspread.Worksheet,
@@ -167,6 +169,8 @@ def process(
     prompt = (
         prompt_template
         .replace("{conference}", conference)
+        .replace("{host_organization}", host_organization)
+        .replace("{host_organization_website}", host_organization_website)
         .replace("{today}", today.isoformat())
     )
     completion = client.beta.chat.completions.parse(
@@ -280,12 +284,19 @@ def main():
         return
 
     headers = rows[0]
-    required_cols = ["Conference", *TARGET_COLUMNS]
+    required_cols = [
+        "Conference",
+        "Host organization",
+        "Host organization website",
+        *TARGET_COLUMNS,
+    ]
     for col in required_cols:
         if col not in headers:
             raise ValueError(f"{col!r} column not found in header row: {headers}")
 
     conf_col_idx = headers.index("Conference")  # 0-based for reading from `row` list
+    host_org_col_idx = headers.index("Host organization")
+    host_org_web_col_idx = headers.index("Host organization website")
     col_map = {
         col: headers.index(col) + 1  # 1-based column indices for gspread
         for col in TARGET_COLUMNS
@@ -306,8 +317,16 @@ def main():
     for row_num in target_rows:
         row = rows[row_num - 1]
         conference = row[conf_col_idx] if conf_col_idx < len(row) else ""
+        host_organization = (
+            row[host_org_col_idx] if host_org_col_idx < len(row) else ""
+        )
+        host_organization_website = (
+            row[host_org_web_col_idx] if host_org_web_col_idx < len(row) else ""
+        )
         process(
             conference,
+            host_organization,
+            host_organization_website,
             row,
             prompt_template,
             worksheet,
